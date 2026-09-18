@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--fatura, cabecalho, numero, data, cliente, nome, morada, telefone, produtos, produto, quantidade, preco, codigo, designacao-->
+
+<fatura>
+    <cabecalho id="12345">
+        <data>2024-06-15</data>
+    </cabecalho>
+    <cliente>
+        <nome>João Silva</nome>
+        <morada>Rua das Flores, 123</morada>
+        <telefone>+351 912345678</telefone>
+    </cliente>
+    <produtos>
+        <produto>
+            <codigo>001</codigo>
+            <designacao>Produto A</designacao>
+            <quantidade>2</quantidade>
+            <preco>10.00</preco>
+        </produto>
+        <produto>
+            <codigo>002</codigo>
+            <designacao>Produto B</designacao>
+            <quantidade>1</quantidade>
+            <preco>20.00</preco>
+        </produto>
+    </produtos>
+</fatura>
+
