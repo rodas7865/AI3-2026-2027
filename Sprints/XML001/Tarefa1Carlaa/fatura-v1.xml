@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<fatura>
+    <cabecalho>
+        <numero>2026-001</numero>
+        <data>2026-09-18</data>
+
+        <cliente>
+            <nome>Carla Moutinho</nome>
+            <morada>Rua das Flores, 25</morada>
+            <telefone>912345678</telefone>
+        </cliente>
+    </cabecalho>
+
+    <produtos>
+        <produto>
+            <codigo>P001</codigo>
+            <designacao>Teclado Mecânico</designacao>
+            <quantidade>1</quantidade>
+            <preco>59.99</preco>
+        </produto>
+    </produtos>
+</fatura>

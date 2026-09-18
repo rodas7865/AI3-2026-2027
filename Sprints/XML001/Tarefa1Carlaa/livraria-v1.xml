@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<bookstore>
+    <book category="Tecnologia">
+        <title lang="pt">Introdução à Programação</title>
+        <author>João Silva</author>
+        <year>2026</year>
+        <price>29.90</price>
+    </book>
+</bookstore>
