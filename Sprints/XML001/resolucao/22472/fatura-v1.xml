@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fatura>
+    <cabecalho>
+        <numero>09642987654567898754</numero>
+        <data>02/12/0001</data>
+    </cabecalho>
+    <cliente>
+        <nome>John Pork</nome>
+        <morada>Rua da Madorna</morada>
+        <telefone>232977440</telefone>
+    </cliente>
+    <produtos>
+        <produto>
+            <codigo>987654</codigo>
+            <designacao>Helmzains Beans</designacao>
+            <preco>4.33</preco>
+            <quantidade>999</quantidade>
+        </produto>
+    </produtos>
+
+</fatura>
+
+<!-- XML com erro erro: 
+ <?xml version="1.0" encoding="UTF-8"?>
+<fatura>
+    <cabecalho>
+        <numero>09642987654567898754</numero>
+        <data>02/12/0001</data>
+    </cabecalho>
+    <cliente>
+        <nome>John Pork</nome>
+        <morada>Rua da Madorna</morada>
+        <telefone>232977440</telefone>
+    </cliente>
+    <produtos>
+        <produto>
+            <codigo>987654</codigo>
+            <designacao>Helmzains Beans</designacao>
+            <preco>4.33</preco>
+            <quantidade>999</quantidade>
+        </produto>
+    </produtos><<<
+</fatura>
+
+Message:
+This page contains the following errors:
+error on line 19 at column 17: StartTag: invalid element name
+Below is a rendering of the page up to the first error.
+-->
