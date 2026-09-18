@@ -1,5 +1,14 @@
 ## 4.4 - Reflexão
 
+| Nó | Tipo | Pai | Irmãos | Justificação |
+|---|---|---|---|---|
+| `fatura` | Raiz | — | — | É o elemento principal que contém toda a estrutura do documento XML. |
+| `produtos` | Intermédio | `fatura` | `cabecalho` | Contém os elementos `produto`. |
+| `designacao` | Terminal | `produto` | `codigo`, `quantidade`, `preco` | Não contém outros elementos, apenas texto. |
+| `id` | Atributo | `fatura` | — | É uma informação associada ao elemento `fatura`. |
+| `Rato Sem Fios` | Texto | `designacao` | — | É o conteúdo textual de um elemento terminal. |
+
+
 ### 1. Qual foi o critério que usou para decidir entre elemento e atributo? Aplique-o ao `telefone` do cliente e justifique a decisão que tomou.
 
 O critério que usei foi considerar como elementos os dados que representam informação própria e que podem ter conteúdo ou estrutura. Os atributos são usados para informações simples que caracterizam ou identificam um elemento.
