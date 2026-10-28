@@ -1,13 +1,14 @@
 openapi: 3.0.3
 info:
   title: API de Sugestões dos Alunos
-  version: 2.0.0
+  version: 2.1.0
   description: API para os alunos submeterem sugestões, os serviços acompanharem o seu tratamento e qualquer pessoa consultar estatísticas de resolução. As operações sobre sugestões exigem autenticação com um token JWT (esquema Bearer), obtido em POST /tokens.
 servers:
   - url: https://api.estgv.exemplo/v2
 
 security:
   - tokenJWT: []
+  - cookieSessao: [] 
 
 paths:
   /sugestoes:
