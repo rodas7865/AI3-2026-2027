@@ -11,9 +11,72 @@ security:
 
 paths:
   /sessao:
-    get:
     post:
+      operationId: criarSessao
+      summary: Criar uma sessão
+      description: Operação pública. Autentica o utilizador e cria uma sessão.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credenciais'
+      responses:
+        '200':
+          description: Sessão criada com sucesso
+          headers:
+            Set-Cookie:
+              description: Cookie de sessão criado pelo servidor
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sessao'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/CredenciaisInvalidas'
+        default:
+          $ref: '#/components/responses/ErroDefault'
+
+    get:
+      operationId: obterSessao
+      summary: Obter a sessão atual
+      description: Devolve os dados da sessão autenticada.
+      security:
+        - cookieSessao: []
+      responses:
+        '200':
+          description: Sessão atual
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CachePrivadoNoCache'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sessao'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        default:
+          $ref: '#/components/responses/ErroDefault'
+
     delete:
+      operationId: terminarSessao
+      summary: Terminar a sessão atual
+      description: Termina a sessão e elimina o cookie de sessão.
+      security: []
+      responses:
+        '204':
+          description: Sessão terminada
+          headers:
+            Set-Cookie:
+              description: Cookie de sessão eliminado pelo servidor
+              schema:
+                type: string
+        default:
+          $ref: '#/components/responses/ErroDefault'
 
   /sugestoes:
     get:
@@ -550,19 +613,22 @@ components:
       required: [utilizador, nome, papel, expiracao]
       properties:
         utilizador:
-            type: string
-            pattern: '^([0-9]{5,8}|[a-z]+\.[a-z]+)$'
-        papel:
           type: string
-          minLength: 3
-          maxLength: 80
+          pattern: '^([0-9]{5,8}|[a-z]+\.[a-z]+)$'
+          description: Identificador do utilizador autenticado
         nome:
           type: string
           minLength: 3
           maxLength: 80
+        papel:
+          type: string
+          enum:
+            - aluno
+            - servicos
         expiracao:
           type: string
           format: date-time
+          description: Data e hora de expiração da sessão
 
     Estado:
       type: string
