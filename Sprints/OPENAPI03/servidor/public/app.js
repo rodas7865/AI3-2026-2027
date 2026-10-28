@@ -1,7 +1,10 @@
-// O token vive apenas nesta variável do módulo: perde-se ao recarregar a página.
-let token = null;
 let expiraEmMs = null;
 let temporizador = null;
+let configuracoes = lerConfiguracoes();
+let formularioSugestao;
+let campoTituloSugestao;
+let campoCategoriaSugestao;
+let campoDescricaoSugestao;
 
 const MENSAGEM_EXPIRADA = 'Sessão expirada. É necessária nova autenticação.';
 const MENSAGEM_REDE = 'Não foi possível contactar o servidor. Verifique a ligação e tente novamente.';
@@ -17,6 +20,70 @@ const botaoSugestoes = elemento('botao-sugestoes');
 const botaoTerminar = elemento('botao-terminar');
 const listaSugestoes = elemento('lista-sugestoes');
 
+const CONFIGURACOES_POR_OMISSAO = { tema: 'claro', ordenacao: 'recentes' };
+
+function lerConfiguracoes() {
+  const porOmissao = { tema: 'claro', ordenacao: 'recentes' };
+  try {
+    const guardadas = localStorage.getItem('configuracoes');
+    if (guardadas === null) return porOmissao;
+    const dados = JSON.parse(guardadas);
+    if (!dados || !['claro', 'escuro'].includes(dados.tema) ||
+        !['recentes', 'estado'].includes(dados.ordenacao)) return porOmissao;
+    return { tema: dados.tema, ordenacao: dados.ordenacao };
+  } catch {
+    return porOmissao;
+  }
+}
+
+function guardarConfiguracoes(novasConfiguracoes) {
+  localStorage.setItem('configuracoes', JSON.stringify(novasConfiguracoes));
+}
+
+function aplicarConfiguracoes() {
+  document.documentElement.dataset.tema = configuracoes.tema;
+}
+
+function criarZonaConfiguracoes() {
+  const zona = document.createElement('section');
+  zona.id = 'configuracoes';
+  zona.setAttribute('aria-label', 'Configurações');
+  const titulo = document.createElement('h2');
+  titulo.textContent = 'Configurações';
+  zona.append(titulo);
+
+  for (const [chave, rotulo, opcoes] of [
+    ['tema', 'Tema', ['claro', 'escuro']],
+    ['ordenacao', 'Ordenação', ['recentes', 'estado']]
+  ]) {
+    const label = document.createElement('label');
+    label.textContent = `${rotulo}: `;
+    const select = document.createElement('select');
+    select.name = chave;
+    for (const valor of opcoes) {
+      const option = document.createElement('option');
+      option.value = valor;
+      option.textContent = valor;
+      select.append(option);
+    }
+    select.value = configuracoes[chave];
+    select.addEventListener('change', () => {
+      configuracoes = { ...configuracoes, [chave]: select.value };
+      aplicarConfiguracoes();
+      guardarConfiguracoes(configuracoes);
+      if (chave === 'ordenacao' && listaSugestoes.childElementCount) {
+        // A lista é atualizada na próxima resposta do servidor.
+      }
+    });
+    label.append(select);
+    zona.append(label);
+  }
+  document.body.prepend(zona);
+}
+
+criarZonaConfiguracoes();
+aplicarConfiguracoes();
+
 // --- Mensagens ---
 function mostrarMensagem(texto) {
   zonaMensagem.textContent = texto;
@@ -24,16 +91,6 @@ function mostrarMensagem(texto) {
 
 function limparMensagem() {
   zonaMensagem.textContent = '';
-}
-
-// --- Payload (passo 23): só para apresentar na interface, nunca para decidir segurança ---
-function descodificarPayload(jwt) {
-  const parte = jwt.split('.')[1];
-  const base64 = parte.replace(/-/g, '+').replace(/_/g, '/');
-  const completo = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
-  const binario = atob(completo);
-  const bytes = Uint8Array.from(binario, (c) => c.charCodeAt(0));
-  return JSON.parse(new TextDecoder('utf-8').decode(bytes));
 }
 
 // --- Sessão ---
@@ -45,6 +102,7 @@ function formatarTempo(milissegundos) {
 }
 
 function atualizarTempoRestante() {
+  if (!expiraEmMs) return;
   const restante = expiraEmMs - Date.now();
   if (restante <= 0) {
     terminarSessao(MENSAGEM_EXPIRADA);
@@ -53,20 +111,90 @@ function atualizarTempoRestante() {
   elemento('tempo-restante').textContent = formatarTempo(restante);
 }
 
-function iniciarSessao(jwt) {
-  const payload = descodificarPayload(jwt);
-  token = jwt;
-  expiraEmMs = payload.exp * 1000;
+function dadosDaSessao(dados) {
+  const sessao = dados?.sessao ?? dados?.utilizador ?? dados?.usuario ?? dados ?? {};
+  return {
+    nome: sessao.nome ?? sessao.name ?? sessao.utilizador ?? 'Utilizador',
+    papel: sessao.papel ?? sessao.role ?? '',
+    exp: sessao.exp ?? sessao.expiraEm ?? sessao.expiresAt
+  };
+}
 
-  elemento('nome').textContent = payload.nome;
-  elemento('papel').textContent = payload.papel;
-  elemento('hora-expiracao').textContent = new Date(expiraEmMs).toLocaleTimeString('pt-PT');
+function criarFormularioSugestao() {
+  if (formularioSugestao) return;
+  formularioSugestao = document.createElement('form');
+  formularioSugestao.id = 'formulario-sugestao';
+  const titulo = document.createElement('h3');
+  titulo.textContent = 'Nova sugestão';
+  formularioSugestao.append(titulo);
+
+  const criarCampo = (rotulo, nome, tag = 'input') => {
+    const label = document.createElement('label');
+    label.textContent = `${rotulo}: `;
+    const campo = document.createElement(tag);
+    campo.name = nome;
+    campo.required = true;
+    label.append(campo);
+    formularioSugestao.append(label);
+    return campo;
+  };
+  campoTituloSugestao = criarCampo('Título', 'titulo');
+  campoCategoriaSugestao = criarCampo('Categoria', 'categoria');
+  campoDescricaoSugestao = criarCampo('Descrição', 'descricao', 'textarea');
+  const enviar = document.createElement('button');
+  enviar.type = 'submit';
+  enviar.textContent = 'Criar sugestão';
+  formularioSugestao.append(enviar);
+
+  formularioSugestao.addEventListener('input', guardarRascunho);
+  formularioSugestao.addEventListener('submit', submeterSugestao);
+  areaSessao.append(formularioSugestao);
+}
+
+function guardarRascunho() {
+  sessionStorage.setItem('rascunhoSugestao', JSON.stringify({
+    titulo: campoTituloSugestao.value,
+    categoria: campoCategoriaSugestao.value,
+    descricao: campoDescricaoSugestao.value
+  }));
+}
+
+function reporRascunho() {
+  try {
+    const rascunho = JSON.parse(sessionStorage.getItem('rascunhoSugestao') || '{}');
+    campoTituloSugestao.value = rascunho.titulo ?? '';
+    campoCategoriaSugestao.value = rascunho.categoria ?? '';
+    campoDescricaoSugestao.value = rascunho.descricao ?? '';
+  } catch {
+    sessionStorage.removeItem('rascunhoSugestao');
+  }
+}
+
+function iniciarSessao(dados) {
+  const sessao = dadosDaSessao(dados);
+  const expiracao = typeof sessao.exp === 'number'
+    ? sessao.exp * 1000
+    : (typeof sessao.exp === 'string' ? Date.parse(sessao.exp) : NaN);
+  expiraEmMs = Number.isFinite(expiracao) ? expiracao : null;
+
+  elemento('nome').textContent = sessao.nome;
+  elemento('papel').textContent = sessao.papel;
+  elemento('hora-expiracao').textContent = expiraEmMs
+    ? new Date(expiraEmMs).toLocaleTimeString('pt-PT') : '';
   botaoSugestoes.textContent =
-    payload.papel === 'servicos' ? 'Todas as sugestões' : 'As minhas sugestões';
+    sessao.papel === 'servicos' ? 'Todas as sugestões' : 'As minhas sugestões';
 
   campoPalavraPasse.value = '';
   areaEntrada.hidden = true;
   areaSessao.hidden = false;
+
+  if (['aluno', 'alunos', 'student'].includes(String(sessao.papel).toLowerCase())) {
+    criarFormularioSugestao();
+    formularioSugestao.hidden = false;
+    reporRascunho();
+  } else if (formularioSugestao) {
+    formularioSugestao.hidden = true;
+  }
 
   atualizarTempoRestante();
   clearInterval(temporizador);
@@ -76,8 +204,8 @@ function iniciarSessao(jwt) {
 function terminarSessao(mensagem) {
   clearInterval(temporizador);
   temporizador = null;
-  token = null;
   expiraEmMs = null;
+  sessionStorage.removeItem('rascunhoSugestao');
 
   listaSugestoes.replaceChildren();
   areaSessao.hidden = true;
@@ -86,7 +214,7 @@ function terminarSessao(mensagem) {
   campoUtilizador.focus();
 }
 
-// --- Autenticação (passo 22) ---
+// --- Autenticação por sessão ---
 formulario.addEventListener('submit', async (evento) => {
   evento.preventDefault();
   limparMensagem();
@@ -98,7 +226,7 @@ formulario.addEventListener('submit', async (evento) => {
 
   let resposta;
   try {
-    resposta = await fetch('/v2/tokens', {
+    resposta = await fetch('/v2/sessao', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(corpo)
@@ -108,9 +236,14 @@ formulario.addEventListener('submit', async (evento) => {
     return;
   }
 
-  if (resposta.status === 200) {
-    const dados = await resposta.json();
-    iniciarSessao(dados.token);
+  if (resposta.ok) {
+    let dados = {};
+    try { dados = await resposta.json(); } catch { /* a sessão pode não devolver corpo */ }
+    if (!dados.nome && !dados.utilizador && !dados.sessao && !dados.papel) {
+      await carregarSessao();
+    } else {
+      iniciarSessao(dados);
+    }
   } else if (resposta.status === 400 || resposta.status === 401) {
     const erro = await resposta.json();
     mostrarMensagem(erro.mensagem);
@@ -119,12 +252,9 @@ formulario.addEventListener('submit', async (evento) => {
   }
 });
 
-// --- Pedidos protegidos (passo 24) ---
-// Devolve a resposta, ou null se o servidor respondeu 401 (a sessão já foi terminada).
+// --- Pedidos protegidos por cookie de sessão ---
 async function pedidoAutenticado(url) {
-  const resposta = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const resposta = await fetch(url);
   if (resposta.status === 401) {
     terminarSessao(MENSAGEM_EXPIRADA);
     return null;
@@ -135,14 +265,22 @@ async function pedidoAutenticado(url) {
 function mostrarSugestoes(itens) {
   listaSugestoes.replaceChildren();
 
-  if (itens.length === 0) {
+  const ordenados = [...itens];
+  if (configuracoes.ordenacao === 'estado') {
+    ordenados.sort((a, b) => String(a.estado).localeCompare(String(b.estado), 'pt'));
+  } else {
+    ordenados.sort((a, b) => new Date(b.criadaEm ?? b.dataCriacao ?? b.createdAt ?? 0) -
+      new Date(a.criadaEm ?? a.dataCriacao ?? a.createdAt ?? 0));
+  }
+
+  if (ordenados.length === 0) {
     const vazio = document.createElement('li');
     vazio.textContent = 'Não há sugestões para mostrar.';
     listaSugestoes.append(vazio);
     return;
   }
 
-  for (const sugestao of itens) {
+  for (const sugestao of ordenados) {
     const li = document.createElement('li');
 
     const titulo = document.createElement('span');
@@ -179,7 +317,63 @@ botaoSugestoes.addEventListener('click', async () => {
   mostrarSugestoes(lista.itens);
 });
 
-// --- Termo de sessão (passo 25) ---
-botaoTerminar.addEventListener('click', () => {
+async function submeterSugestao(evento) {
+  evento.preventDefault();
+  limparMensagem();
+  try {
+    const resposta = await fetch('/v2/sugestoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        titulo: campoTituloSugestao.value.trim(),
+        categoria: campoCategoriaSugestao.value.trim(),
+        descricao: campoDescricaoSugestao.value.trim()
+      })
+    });
+    if (resposta.status === 401) {
+      terminarSessao(MENSAGEM_EXPIRADA);
+    } else if (resposta.ok) {
+      formularioSugestao.reset();
+      sessionStorage.removeItem('rascunhoSugestao');
+      mostrarMensagem('Sugestão criada com sucesso.');
+    } else {
+      mostrarMensagem(`Erro inesperado do servidor (código ${resposta.status}).`);
+    }
+  } catch {
+    mostrarMensagem(MENSAGEM_REDE);
+  }
+}
+
+async function carregarSessao() {
+  try {
+    const resposta = await fetch('/v2/sessao');
+    if (resposta.status === 200) {
+      let dados = {};
+      try { dados = await resposta.json(); } catch { /* resposta sem corpo */ }
+      iniciarSessao(dados);
+    } else if (resposta.status === 401) {
+      terminarSessao('');
+    } else {
+      mostrarMensagem(`Erro inesperado do servidor (código ${resposta.status}).`);
+    }
+  } catch {
+    mostrarMensagem(MENSAGEM_REDE);
+  }
+}
+
+// --- Termo de sessão ---
+botaoTerminar.addEventListener('click', async () => {
+  let mensagem = '';
+  try {
+    const resposta = await fetch('/v2/sessao', { method: 'DELETE' });
+    if (!resposta.ok && resposta.status !== 401) {
+      mensagem = `Erro inesperado do servidor (código ${resposta.status}).`;
+    }
+  } catch {
+    mensagem = MENSAGEM_REDE;
+  }
   terminarSessao('');
+  if (mensagem) mostrarMensagem(mensagem);
 });
+
+carregarSessao();

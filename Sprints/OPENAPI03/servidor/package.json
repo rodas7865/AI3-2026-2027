@@ -4,6 +4,10 @@
   "description": "",
   "main": "servidor.js",
   "scripts": {
+    "start": "node servidor.js",
+    "dev": "node --watch servidor.js --env .env.exemplo",
+    "debug": "node --inspect servidor.js",
+    "start:client": "npm --prefix ../cliente start",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
