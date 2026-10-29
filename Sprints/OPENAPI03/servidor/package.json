@@ -5,7 +5,7 @@
   "main": "servidor.js",
   "scripts": {
     "start": "node servidor.js",
-    "dev": "node --watch servidor.js --env .env.exemplo",
+    "dev": "node --watch --env-file=.env.exemplo servidor.js ",
     "debug": "node --inspect servidor.js",
     "start:client": "npm --prefix ../cliente start",
     "test": "echo \"Error: no test specified\" && exit 1"

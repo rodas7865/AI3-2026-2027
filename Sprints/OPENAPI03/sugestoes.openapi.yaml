@@ -8,76 +8,9 @@ servers:
 
 security:
   - tokenJWT: []
+  - cookieSessao: []
 
 paths:
-  /sessao:
-    post:
-      operationId: criarSessao
-      summary: Criar uma sessão
-      description: Operação pública. Autentica o utilizador e cria uma sessão.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Credenciais'
-      responses:
-        '200':
-          description: Sessão criada com sucesso
-          headers:
-            Set-Cookie:
-              description: Cookie de sessão criado pelo servidor
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Sessao'
-        '400':
-          $ref: '#/components/responses/Erro400'
-        '401':
-          $ref: '#/components/responses/CredenciaisInvalidas'
-        default:
-          $ref: '#/components/responses/ErroDefault'
-
-    get:
-      operationId: obterSessao
-      summary: Obter a sessão atual
-      description: Devolve os dados da sessão autenticada.
-      security:
-        - cookieSessao: []
-      responses:
-        '200':
-          description: Sessão atual
-          headers:
-            Cache-Control:
-              $ref: '#/components/headers/CachePrivadoNoCache'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Sessao'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        default:
-          $ref: '#/components/responses/ErroDefault'
-
-    delete:
-      operationId: terminarSessao
-      summary: Terminar a sessão atual
-      description: Termina a sessão e elimina o cookie de sessão.
-      security: []
-      responses:
-        '204':
-          description: Sessão terminada
-          headers:
-            Set-Cookie:
-              description: Cookie de sessão eliminado pelo servidor
-              schema:
-                type: string
-        default:
-          $ref: '#/components/responses/ErroDefault'
-
   /sugestoes:
     get:
       operationId: listarSugestoes
@@ -450,6 +383,76 @@ paths:
         default:
           $ref: '#/components/responses/ErroDefault'
 
+  /sessao:
+    post:
+      operationId: criarSessao
+      summary: Criar uma sessão
+      description: Operação pública. Autentica o utilizador e cria um cookie de sessão.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credenciais'
+      responses:
+        '200':
+          description: Sessão criada
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheNoStore'
+            Set-Cookie:
+              description: Cookie de sessão com os atributos HttpOnly, Secure, SameSite=Strict e Path=/.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sessao'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/CredenciaisInvalidas'
+        default:
+          $ref: '#/components/responses/ErroDefault'
+    get:
+      operationId: obterSessao
+      summary: Obter a sessão atual
+      description: Requer autenticação com token Bearer.
+      security:
+        - tokenJWT: []
+      responses:
+        '200':
+          description: Sessão atual
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheNoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sessao'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        default:
+          $ref: '#/components/responses/ErroDefault'
+    delete:
+      operationId: terminarSessao
+      summary: Terminar a sessão
+      description: Operação pública; apaga o cookie de sessão, se existir.
+      security: []
+      responses:
+        '204':
+          description: Sessão terminada
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheNoStore'
+            Set-Cookie:
+              description: Apaga o cookie de sessão usando os atributos HttpOnly, Secure, SameSite=Strict, Path=/ e Max-Age=0.
+              schema:
+                type: string
+        default:
+          $ref: '#/components/responses/ErroDefault'
+
 components:
   securitySchemes:
     tokenJWT:
@@ -470,9 +473,7 @@ components:
       type: apiKey
       in: cookie
       name: sessao
-      description: "type: apiKey
-                    in: cookie
-                    name: sessao"
+      description: "Cookie de sessão enviado como sessao; atributos Set-Cookie: HttpOnly, Secure, SameSite=Strict e Path=/."
 
   parameters:
     IdSugestao:
@@ -608,28 +609,6 @@ components:
             $ref: '#/components/schemas/Erro'
 
   schemas:
-    Sessao:
-      type: object
-      required: [utilizador, nome, papel, expiracao]
-      properties:
-        utilizador:
-          type: string
-          pattern: '^([0-9]{5,8}|[a-z]+\.[a-z]+)$'
-          description: Identificador do utilizador autenticado
-        nome:
-          type: string
-          minLength: 3
-          maxLength: 80
-        papel:
-          type: string
-          enum:
-            - aluno
-            - servicos
-        expiracao:
-          type: string
-          format: date-time
-          description: Data e hora de expiração da sessão
-
     Estado:
       type: string
       enum: [submetida, em_analise, aceite, rejeitada, resolvida]
@@ -830,6 +809,20 @@ components:
           format: password
           minLength: 8
           maxLength: 128
+
+    Sessao:
+      type: object
+      required: [utilizador, nome, papel, expiracao]
+      properties:
+        utilizador:
+          type: string
+        nome:
+          type: string
+        papel:
+          type: string
+        expiracao:
+          type: string
+          format: date-time
 
     Token:
       type: object

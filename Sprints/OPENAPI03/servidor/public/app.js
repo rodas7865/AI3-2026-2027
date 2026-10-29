@@ -1,5 +1,6 @@
 let expiraEmMs = null;
 let temporizador = null;
+let tokenAcesso = sessionStorage.getItem('tokenAcesso');
 let configuracoes = lerConfiguracoes();
 let formularioSugestao;
 let campoTituloSugestao;
@@ -112,12 +113,29 @@ function atualizarTempoRestante() {
 }
 
 function dadosDaSessao(dados) {
-  const sessao = dados?.sessao ?? dados?.utilizador ?? dados?.usuario ?? dados ?? {};
+  const sessao = dados?.sessao ??
+    (typeof dados?.utilizador === 'object' ? dados.utilizador : null) ??
+    (typeof dados?.usuario === 'object' ? dados.usuario : null) ??
+    dados ?? {};
   return {
-    nome: sessao.nome ?? sessao.name ?? sessao.utilizador ?? 'Utilizador',
+    nome: sessao.nome ?? sessao.name ?? sessao.utilizador ?? sessao.sub ?? 'Utilizador',
     papel: sessao.papel ?? sessao.role ?? '',
-    exp: sessao.exp ?? sessao.expiraEm ?? sessao.expiresAt
+    exp: sessao.exp ?? sessao.expiresAt,
+    expiraEm: sessao.expiraEm
   };
+}
+
+function dadosDoToken(token) {
+  try {
+    const parte = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const preenchida = parte.padEnd(Math.ceil(parte.length / 4) * 4, '=');
+    const texto = decodeURIComponent(Array.from(atob(preenchida), (caracter) =>
+      `%${caracter.charCodeAt(0).toString(16).padStart(2, '0')}`
+    ).join(''));
+    return JSON.parse(texto);
+  } catch {
+    return null;
+  }
 }
 
 function criarFormularioSugestao() {
@@ -174,7 +192,11 @@ function iniciarSessao(dados) {
   const sessao = dadosDaSessao(dados);
   const expiracao = typeof sessao.exp === 'number'
     ? sessao.exp * 1000
-    : (typeof sessao.exp === 'string' ? Date.parse(sessao.exp) : NaN);
+    : (typeof sessao.exp === 'string'
+      ? Date.parse(sessao.exp)
+      : (typeof sessao.expiraEm === 'number'
+        ? Date.now() + sessao.expiraEm * 1000
+        : (typeof sessao.expiraEm === 'string' ? Date.parse(sessao.expiraEm) : NaN)));
   expiraEmMs = Number.isFinite(expiracao) ? expiracao : null;
 
   elemento('nome').textContent = sessao.nome;
@@ -205,6 +227,8 @@ function terminarSessao(mensagem) {
   clearInterval(temporizador);
   temporizador = null;
   expiraEmMs = null;
+  tokenAcesso = null;
+  sessionStorage.removeItem('tokenAcesso');
   sessionStorage.removeItem('rascunhoSugestao');
 
   listaSugestoes.replaceChildren();
@@ -225,9 +249,11 @@ formulario.addEventListener('submit', async (evento) => {
   };
 
   let resposta;
+  let usouToken = true;
   try {
-    resposta = await fetch('/v2/sessao', {
+    resposta = await fetch('/v2/tokens', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(corpo)
     });
@@ -236,11 +262,37 @@ formulario.addEventListener('submit', async (evento) => {
     return;
   }
 
+  if (resposta.status === 404) {
+    usouToken = false;
+    try {
+      resposta = await fetch('/v2/sessao', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpo)
+      });
+    } catch {
+      mostrarMensagem(MENSAGEM_REDE);
+      return;
+    }
+  }
+
   if (resposta.ok) {
     let dados = {};
     try { dados = await resposta.json(); } catch { /* a sessão pode não devolver corpo */ }
+    if (usouToken) {
+      const claims = dadosDoToken(dados.token);
+      if (!claims) {
+        mostrarMensagem('Resposta de autenticação inválida.');
+        return;
+      }
+      tokenAcesso = dados.token;
+      sessionStorage.setItem('tokenAcesso', tokenAcesso);
+      iniciarSessao(claims);
+      return;
+    }
     if (!dados.nome && !dados.utilizador && !dados.sessao && !dados.papel) {
-      await carregarSessao();
+      iniciarSessao({ nome: corpo.utilizador });
     } else {
       iniciarSessao(dados);
     }
@@ -254,7 +306,10 @@ formulario.addEventListener('submit', async (evento) => {
 
 // --- Pedidos protegidos por cookie de sessão ---
 async function pedidoAutenticado(url) {
-  const resposta = await fetch(url);
+  const cabecalhos = tokenAcesso
+    ? { Authorization: `Bearer ${tokenAcesso}` }
+    : {};
+  const resposta = await fetch(url, { credentials: 'include', headers: cabecalhos });
   if (resposta.status === 401) {
     terminarSessao(MENSAGEM_EXPIRADA);
     return null;
@@ -323,7 +378,11 @@ async function submeterSugestao(evento) {
   try {
     const resposta = await fetch('/v2/sugestoes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tokenAcesso ? { Authorization: `Bearer ${tokenAcesso}` } : {})
+      },
       body: JSON.stringify({
         titulo: campoTituloSugestao.value.trim(),
         categoria: campoCategoriaSugestao.value.trim(),
@@ -346,15 +405,18 @@ async function submeterSugestao(evento) {
 
 async function carregarSessao() {
   try {
-    const resposta = await fetch('/v2/sessao');
+    const resposta = await fetch('/v2/sessao', { credentials: 'include' });
     if (resposta.status === 200) {
       let dados = {};
       try { dados = await resposta.json(); } catch { /* resposta sem corpo */ }
       iniciarSessao(dados);
-    } else if (resposta.status === 401) {
-      terminarSessao('');
+    } else if (resposta.status === 401 || resposta.status === 404) {
+      const claims = tokenAcesso ? dadosDoToken(tokenAcesso) : null;
+      if (claims) iniciarSessao(claims);
+      else terminarSessao('');
     } else {
       mostrarMensagem(`Erro inesperado do servidor (código ${resposta.status}).`);
+      console.log(resposta);
     }
   } catch {
     mostrarMensagem(MENSAGEM_REDE);
@@ -365,7 +427,10 @@ async function carregarSessao() {
 botaoTerminar.addEventListener('click', async () => {
   let mensagem = '';
   try {
-    const resposta = await fetch('/v2/sessao', { method: 'DELETE' });
+    const resposta = await fetch('/v2/sessao', {
+      method: 'DELETE',
+      credentials: 'include'
+    });
     if (!resposta.ok && resposta.status !== 401) {
       mensagem = `Erro inesperado do servidor (código ${resposta.status}).`;
     }

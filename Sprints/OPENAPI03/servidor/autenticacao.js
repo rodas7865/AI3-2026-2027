@@ -42,10 +42,10 @@ function validarCredenciais(corpo) {
       problema: 'Tem de ser um número de aluno (5 a 8 algarismos) ou um identificador nome.apelido.'
     });
   }
-  if (typeof palavraPasse !== 'string' || palavraPasse.length < 8 || palavraPasse.length > 128) {
+  if (typeof palavraPasse !== 'string' || palavraPasse.length > 128) {
     detalhes.push({
       campo: 'palavraPasse',
-      problema: 'Tem de ser uma string entre 8 e 128 caracteres.'
+      problema: 'Tem de ser uma string com, no máximo, 128 caracteres.'
     });
   }
   return detalhes;
@@ -123,6 +123,7 @@ export async function criarSessao(req, res, next) {
       expiraEm: validade
     });
   } catch (erro) {
+    console.log("here")
     next(erro);
   }
 }
@@ -164,7 +165,22 @@ export function apagarSessao(_req, res) {
 
 // --- Middleware de proteção (passo 17) ---
 export function exigirToken(req, res, next) {
-  const partes = /^Bearer (\S+)$/i.exec(req.get('Authorization') ?? '');
+  let autorizacao = req.get('Authorization') ?? '';
+  if (!autorizacao) {
+    const cookie = (req.get('Cookie') ?? '')
+      .split(';')
+      .map((parte) => parte.trim())
+      .find((parte) => parte.startsWith('sessao='));
+    if (cookie) {
+      try {
+        autorizacao = `Bearer ${decodeURIComponent(cookie.slice('sessao='.length))}`;
+      } catch {
+        autorizacao = '';
+      }
+    }
+  }
+
+  const partes = /^Bearer (\S+)$/i.exec(autorizacao);
   if (!partes) {
     return enviarErro(res, 401, 'Token ausente.', {
       cabecalhos: { 'WWW-Authenticate': 'Bearer' }
