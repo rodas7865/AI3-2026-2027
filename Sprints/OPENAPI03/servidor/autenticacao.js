@@ -16,6 +16,7 @@ const utilizadores = JSON.parse(
 );
 // Hash fixo, usado para que o tempo de resposta seja o mesmo quando o utilizador não existe
 const HASH_FICTICIO = bcrypt.hashSync('palavra-passe-ficticia', 10);
+const sugestoes = [];
 
 // --- Respostas de erro (corpo Erro do contrato, sempre com no-store) ---
 export function enviarErro(res, codigo, mensagem, { detalhes, cabecalhos } = {}) {
@@ -41,10 +42,10 @@ function validarCredenciais(corpo) {
       problema: 'Tem de ser um número de aluno (5 a 8 algarismos) ou um identificador nome.apelido.'
     });
   }
-  if (typeof palavraPasse !== 'string' || palavraPasse.length < 8 || palavraPasse.length > 128) {
+  if (typeof palavraPasse !== 'string' || palavraPasse.length > 128) {
     detalhes.push({
       campo: 'palavraPasse',
-      problema: 'Tem de ser uma string entre 8 e 128 caracteres.'
+      problema: 'Tem de ser uma string com, no máximo, 128 caracteres.'
     });
   }
   return detalhes;
@@ -83,9 +84,103 @@ export async function criarToken(req, res, next) {
   }
 }
 
+// --- POST /v2/sessao ---
+export async function criarSessao(req, res, next) {
+  try {
+    const detalhes = validarCredenciais(req.body ?? null);
+    if (detalhes.length > 0) {
+      return enviarErro(res, 400, 'Pedido inválido.', { detalhes });
+    }
+
+    const { utilizador, palavraPasse } = req.body;
+    const registo = utilizadores.find((u) => u.utilizador === utilizador);
+    const palavraCorreta = await bcrypt.compare(
+      palavraPasse,
+      registo ? registo.hashPalavraPasse : HASH_FICTICIO
+    );
+
+    if (!registo || !palavraCorreta) {
+      return enviarErro(res, 401, 'Utilizador ou palavra-passe incorretos.');
+    }
+
+    const token = jwt.sign(
+      { sub: registo.utilizador, nome: registo.nome, papel: registo.papel },
+      segredo,
+      { algorithm: 'HS256', expiresIn: validade }
+    );
+
+    res.cookie('sessao', token, {
+      httpOnly: true,
+      sameSite: 'strict',
+      path: '/v2',
+      maxAge: validade * 1000
+    });
+    res.set('Cache-Control', 'no-store');
+    res.status(200).json({
+      utilizador: registo.utilizador,
+      nome: registo.nome,
+      papel: registo.papel,
+      expiraEm: validade
+    });
+  } catch (erro) {
+    console.log("here")
+    next(erro);
+  }
+}
+
+// --- GET /v2/sessao ---
+export function obterSessao(req, res) {
+  res.set('Cache-Control', 'no-store');
+  res.status(200).json({
+    utilizador: req.utilizador.sub,
+    nome: req.utilizador.nome,
+    papel: req.utilizador.papel
+  });
+}
+
+// --- POST /v2/sugestoes (usar após exigirToken e exigirPapel('aluno')) ---
+export function criarSugestao(req, res) {
+  if (!req.utilizador) {
+    return enviarErro(res, 401, 'Token ausente.', {
+      cabecalhos: { 'WWW-Authenticate': 'Bearer' }
+    });
+  }
+  if (req.utilizador.papel !== 'aluno') {
+    return enviarErro(res, 403, 'Sem permissão para esta operação.');
+  }
+  if (req.body === null || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return enviarErro(res, 400, 'Pedido inválido.');
+  }
+
+  const sugestao = { ...req.body, numeroAluno: req.utilizador.sub };
+  sugestoes.push(sugestao);
+  res.status(201).json(sugestao);
+}
+
+// --- DELETE /v2/sessao ---
+export function apagarSessao(_req, res) {
+  res.clearCookie('sessao', { path: '/v2' });
+  res.status(204).end();
+}
+
 // --- Middleware de proteção (passo 17) ---
 export function exigirToken(req, res, next) {
-  const partes = /^Bearer (\S+)$/i.exec(req.get('Authorization') ?? '');
+  let autorizacao = req.get('Authorization') ?? '';
+  if (!autorizacao) {
+    const cookie = (req.get('Cookie') ?? '')
+      .split(';')
+      .map((parte) => parte.trim())
+      .find((parte) => parte.startsWith('sessao='));
+    if (cookie) {
+      try {
+        autorizacao = `Bearer ${decodeURIComponent(cookie.slice('sessao='.length))}`;
+      } catch {
+        autorizacao = '';
+      }
+    }
+  }
+
+  const partes = /^Bearer (\S+)$/i.exec(autorizacao);
   if (!partes) {
     return enviarErro(res, 401, 'Token ausente.', {
       cabecalhos: { 'WWW-Authenticate': 'Bearer' }
