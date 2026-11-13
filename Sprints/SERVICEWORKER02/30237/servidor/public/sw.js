@@ -10,7 +10,7 @@ const FICHEIROS_INTERFACE = [
   "/app.js",
   "/configuracoes.js",
   "/bd.js",
-  "/pendentes.js",
+  // "/pendentes.js",
   "/sincronizacao.js",
 ];
 

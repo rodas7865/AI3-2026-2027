@@ -16,7 +16,7 @@ import {
   guardarConfiguracoes,
   lerConfiguracoes,
 } from "./configuracoes.js";
-import { enviarPendentes } from "./pendentes.js";
+// import { enviarPendentes } from "./pendentes.js";
 
 const porId = (id) => document.getElementById(id);
 const elementosEstado = {
@@ -35,6 +35,108 @@ let pendentesVisiveis = [];
 let temporizadorSessao = null;
 let atualizacaoSW = null;
 let recarregarQuandoControlado = false;
+
+const ETIQUETA_SYNC = 'sincronizar-sugestoes';
+let suportaSync = true;
+let falhasSeguidas = 0;
+let temporizadorNovaTentativa = null;
+let temporizadorEstadoSync = null;
+let persistenciaPedida = false;
+
+async function pedirSync() {
+  if (!('serviceWorker' in navigator)) return;
+  const registo = await navigator.serviceWorker.ready;
+  if ('sync' in registo) {
+    try {
+      await registo.sync.register(ETIQUETA_SYNC);
+      suportaSync = true;
+      return;
+    } catch {
+      // permissão recusada: segue para o plano B
+    }
+  }
+  suportaSync = false;
+  registo.active?.postMessage({ tipo: 'sincronizar' });
+}
+
+function cancelarNovaTentativa() {
+  clearTimeout(temporizadorNovaTentativa);
+  temporizadorNovaTentativa = null;
+}
+
+function agendarNovaTentativa() {
+  if (temporizadorNovaTentativa) return; // só um agendamento de cada vez
+  const segundos = Math.min(60, 2 ** falhasSeguidas) * (0.7 + 0.6 * Math.random());
+  console.log(`Nova tentativa dentro de ${segundos.toFixed(1)} s (falhas seguidas: ${falhasSeguidas}).`);
+  temporizadorNovaTentativa = setTimeout(() => {
+    temporizadorNovaTentativa = null;
+    pedirSync();
+  }, segundos * 1000);
+}
+
+function mostrarEstadoSync(texto) {
+  mostrarMensagem(texto);
+  clearTimeout(temporizadorEstadoSync);
+  temporizadorEstadoSync = setTimeout(() => {
+    if (porId('mensagem').textContent === texto) mostrarMensagem('');
+  }, 5000);
+}
+
+async function pedirPersistencia() {
+  if (persistenciaPedida || !navigator.storage?.persist) return;
+  persistenciaPedida = true;
+  try {
+    const persistente = await navigator.storage.persist();
+    const estimativa = await navigator.storage.estimate();
+    console.log('Armazenamento persistente:', persistente, estimativa);
+  } catch (erro) {
+    console.warn('Não foi possível pedir armazenamento persistente:', erro);
+  }
+}
+
+function descreverPendente(pendente) {
+  if (pendente.erro !== null) return `Erro: ${pendente.erro}`;
+  if (pendente.tentativas > 0) {
+    return `Por enviar (${pendente.tentativas} ${pendente.tentativas === 1 ? 'tentativa' : 'tentativas'})`;
+  }
+  return 'Por enviar';
+}
+
+async function tratarMensagemSW(mensagem) {
+  switch (mensagem?.tipo) {
+    case 'sincronizado': {
+      falhasSeguidas = 0;
+      cancelarNovaTentativa();
+      await atualizarListasLocais();
+      await atualizarListaPendentes();
+      mostrarEstadoSync(mensagem.enviadas > 0 || mensagem.recebidas > 0
+        ? `Sincronizado: ${mensagem.enviadas} enviadas, ${mensagem.recebidas} recebidas`
+        : 'Sincronizado');
+      // extra meu: se o servidor respondeu, a página já não está sem ligação
+      if (document.body.dataset.estado === 'sem-ligacao') await sincronizarSessao();
+      break;
+    }
+    case 'sessao-expirada': {
+      falhasSeguidas = 0;
+      cancelarNovaTentativa();
+      await atualizarListaPendentes();
+      if (document.body.dataset.estado !== 'com-sessao') break;
+      expirarSessao(mensagem.porEnviar > 0
+        ? `Há ${mensagem.porEnviar} sugestões por enviar. Entre de novo para as enviar.`
+        : 'A sessão expirou. Entre de novo.');
+      break;
+    }
+    case 'sem-rede':
+    case 'erro-servidor': {
+      falhasSeguidas += 1;
+      await atualizarListaPendentes();
+      const porEnviar = pendentesVisiveis.filter((p) => p.erro === null).length;
+      mostrarMensagem(`Por enviar: ${porEnviar}. Nova tentativa automática.`);
+      if (!suportaSync) agendarNovaTentativa();
+      break;
+    }
+  }
+}
 
 aplicarConfiguracoes(configuracoes);
 criarZonaConfiguracoes();
@@ -172,7 +274,8 @@ async function atualizarListaPendentes() {
     for (const pendente of pendentesVisiveis) {
       const item = document.createElement("li");
       const texto = document.createElement("span");
-      texto.textContent = `${pendente.titulo} — ${pendente.erro ?? "Por enviar"}`;
+      // texto.textContent = `${pendente.titulo} — ${pendente.erro ?? "Por enviar"}`;
+      texto.textContent = `${pendente.titulo} — ${descreverPendente(pendente)}`;
       const descartar = document.createElement("button");
       descartar.type = "button";
       descartar.textContent = "Descartar";
@@ -329,29 +432,29 @@ async function carregarCategorias() {
   }
 }
 
-async function carregarSugestoes() {
-  try {
-    const resposta = await fetch("/v2/sugestoes", { credentials: "include" });
-    if (resposta.status === 401) {
-      expirarSessao("A sessão expirou. Entre de novo.");
-      return;
-    }
-    if (!resposta.ok) {
-      mostrarMensagem(
-        `Não foi possível carregar as sugestões (código ${resposta.status}).`,
-      );
-      return;
-    }
+// async function carregarSugestoes() {
+//   try {
+//     const resposta = await fetch("/v2/sugestoes", { credentials: "include" });
+//     if (resposta.status === 401) {
+//       expirarSessao("A sessão expirou. Entre de novo.");
+//       return;
+//     }
+//     if (!resposta.ok) {
+//       mostrarMensagem(
+//         `Não foi possível carregar as sugestões (código ${resposta.status}).`,
+//       );
+//       return;
+//     }
 
-    const resultado = await resposta.json();
-    await substituirSugestoes(
-      Array.isArray(resultado) ? resultado : resultado.itens,
-    );
-    await atualizarListasLocais();
-  } catch {
-    await ativarSemLigacao("Sem ligação: a lista pode estar desatualizada.");
-  }
-}
+//     const resultado = await resposta.json();
+//     await substituirSugestoes(
+//       Array.isArray(resultado) ? resultado : resultado.itens,
+//     );
+//     await atualizarListasLocais();
+//   } catch {
+//     await ativarSemLigacao("Sem ligação: a lista pode estar desatualizada.");
+//   }
+// }
 
 async function ativarSemLigacao(mensagem) {
   mostrarMensagem(mensagem);
@@ -375,10 +478,9 @@ async function sincronizarSessao({ veioDeOnline = false } = {}) {
     mostrarMensagem("");
     iniciarTemporizador(sessao);
     mudarEstado("com-sessao");
+    await atualizarListasLocais();   // mostra já o que há no dispositivo
     await atualizarListaPendentes();
-    await carregarSugestoes();
-    if (document.body.dataset.estado === "com-sessao")
-      await enviarPendentesAgora();
+    pedirSync();
     return;
   }
 
@@ -397,25 +499,25 @@ async function sincronizarSessao({ veioDeOnline = false } = {}) {
   );
 }
 
-async function enviarPendentesAgora() {
-  if (!sessaoAtual) return;
-  await enviarPendentes(sessaoAtual, {
-    aoExpirar: async (quantidade) => {
-      expirarSessao(
-        `Há ${quantidade} sugestões por enviar. Entre de novo para as enviar.`,
-      );
-    },
-    aoSemLigacao: async () => {
-      await ativarSemLigacao(
-        "Sem ligação: as sugestões pendentes aguardam rede.",
-      );
-    },
-    aoAtualizar: async () => {
-      await atualizarListasLocais();
-      await atualizarListaPendentes();
-    },
-  });
-}
+// async function enviarPendentesAgora() {
+//   if (!sessaoAtual) return;
+//   await enviarPendentes(sessaoAtual, {
+//     aoExpirar: async (quantidade) => {
+//       expirarSessao(
+//         `Há ${quantidade} sugestões por enviar. Entre de novo para as enviar.`,
+//       );
+//     },
+//     aoSemLigacao: async () => {
+//       await ativarSemLigacao(
+//         "Sem ligação: as sugestões pendentes aguardam rede.",
+//       );
+//     },
+//     aoAtualizar: async () => {
+//       await atualizarListasLocais();
+//       await atualizarListaPendentes();
+//     },
+//   });
+// }
 
 async function entrar(evento) {
   evento.preventDefault();
@@ -477,55 +579,24 @@ function dadosFormularioSugestao() {
 async function guardarComoPendente(dados, utilizador) {
   await acrescentarPendente(dados, utilizador);
   limparRascunho();
-  mostrarMensagem("Sem ligação: sugestão guardada para envio posterior.");
-  await atualizarCopiaOffline();
+  mostrarMensagem('Sugestão guardada no dispositivo.');
   await atualizarListaPendentes();
-  mudarEstado("sem-ligacao");
+  pedirPersistencia();
+  pedirSync();
 }
 
 async function submeterSugestao(evento) {
   evento.preventDefault();
   if (!categoriasDisponiveis) return;
   const dados = dadosFormularioSugestao();
+  const estado = document.body.dataset.estado;
 
-  if (document.body.dataset.estado === "sem-ligacao") {
-    if (!copiaOfflineValida || proprietarioLocal?.papel !== "aluno") {
-      mostrarMensagem(
-        "Sem uma sessão local válida, não é possível guardar esta sugestão para envio.",
-      );
-      return;
-    }
-    await guardarComoPendente(dados, proprietarioLocal.utilizador);
-    return;
-  }
-
-  if (document.body.dataset.estado !== "com-sessao" || !sessaoAtual) return;
-  try {
-    const resposta = await fetch("/v2/sugestoes", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(dados),
-    });
-
-    if (resposta.status === 201) {
-      const sugestao = await resposta.json();
-      await guardarSugestao(sugestao);
-      limparRascunho();
-      mostrarMensagem("Sugestão criada com sucesso.");
-      await atualizarListasLocais();
-    } else if (resposta.status === 401) {
-      expirarSessao("A sessão expirou. Entre de novo.");
-    } else if (resposta.status === 400) {
-      const erro = await resposta.json();
-      mostrarMensagem(erro.mensagem);
-    } else {
-      mostrarMensagem(
-        `Erro inesperado do servidor (código ${resposta.status}).`,
-      );
-    }
-  } catch {
+  if (estado === 'com-sessao' && sessaoAtual) {
     await guardarComoPendente(dados, sessaoAtual.utilizador);
+  } else if (estado === 'sem-ligacao' && copiaOfflineValida && proprietarioLocal?.papel === 'aluno') {
+    await guardarComoPendente(dados, proprietarioLocal.utilizador);
+  } else {
+    mostrarMensagem('Sem uma sessão local válida, não é possível guardar esta sugestão para envio.');
   }
 }
 
@@ -625,13 +696,31 @@ porId("formulario-entrada").addEventListener("submit", entrar);
 porId("formulario-sugestao").addEventListener("input", guardarRascunho);
 porId("formulario-sugestao").addEventListener("submit", submeterSugestao);
 porId("botao-terminar").addEventListener("click", terminarSessao);
-porId("botao-sugestoes").addEventListener("click", carregarSugestoes);
+// porId("botao-sugestoes").addEventListener("click", carregarSugestoes);
+porId('botao-sugestoes').addEventListener('click', () => pedirSync());
 
-window.addEventListener("online", async () => {
-  porId("indicacao-ligacao").textContent =
-    "Ligação disponível; a confirmar sessão…";
+window.addEventListener('online', async () => {
+  porId('indicacao-ligacao').textContent = 'Ligação disponível; a confirmar sessão…';
+  pedirSync();
   await sincronizarSessao({ veioDeOnline: true });
 });
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) pedirSync();
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (evento) => {
+    tratarMensagemSW(evento.data).catch((erro) => console.error(erro));
+  });
+}
+
+// window.addEventListener("online", async () => {
+//   porId("indicacao-ligacao").textContent =
+//     "Ligação disponível; a confirmar sessão…";
+//   await sincronizarSessao({ veioDeOnline: true });
+// });
+
 window.addEventListener("offline", () => {
   porId("indicacao-ligacao").textContent =
     "O browser indica que não há ligação.";
