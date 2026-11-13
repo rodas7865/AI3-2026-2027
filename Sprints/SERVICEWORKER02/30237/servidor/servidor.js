@@ -22,7 +22,22 @@ app.use(express.json());
 app.use(express.static(pastaPublica)); // passo 20: cliente na mesma origem
 app.locals.sugestoes = sugestoes;
 
+sugestoes.forEach((s, i) => { s.versao ??= i + 1; });
+app.locals.ultimaVersao = Math.max(0, ...sugestoes.map((s) => s.versao));
+
 const v2 = express.Router();
+
+///////////////////////
+let restantes503 = Number(process.env.SIMULAR_503) || 0;
+function simular503(_req, res, next) {
+  if (restantes503 > 0) {
+    restantes503 -= 1;
+    res.set('Retry-After', '2');
+    return enviarErro(res, 503, 'Serviço temporariamente indisponível.');
+  }
+  next();
+}
+///////////////////////
 
 function autenticarCookieSessao(req, _res, next) {
   if (!req.get('Authorization')) {
@@ -74,7 +89,29 @@ v2.get('/sugestoes', exigirToken, (req, res) => {
   res.set('Cache-Control', 'private, no-cache');
   res.status(200).json({ pagina: 1, tamanhoPagina: 20, total: itens.length, itens });
 });
-v2.post('/sugestoes', exigirToken, criarSugestao);
+v2.post('/sugestoes', exigirToken, simular503, criarSugestao);
+
+v2.get('/sugestoes/alteracoes', exigirToken, (req, res) => {
+  const { desde } = req.query;
+  if (typeof desde !== 'string' || !/^(0|[1-9][0-9]{0,14})$/.test(desde)) {
+    return enviarErro(res, 400, 'Pedido inválido.', {
+      detalhes: [{ campo: 'desde', problema: 'Tem de ser um inteiro maior ou igual a 0.' }]
+    });
+  }
+  const limite = Number(desde);
+
+  const visiveis =
+    req.utilizador.papel === 'servicos'
+      ? sugestoes
+      : sugestoes.filter((s) => s.numeroAluno === req.utilizador.sub);
+  const alteracoes = visiveis
+    .filter((s) => s.versao > limite)
+    .sort((a, b) => a.versao - b.versao);
+  const cursor = alteracoes.length > 0 ? alteracoes[alteracoes.length - 1].versao : limite;
+
+  res.set('Cache-Control', 'private, no-store');
+  res.status(200).json({ alteracoes, cursor });
+});
 
 v2.get('/categorias', (_req, res) => {
   res.set('Cache-Control', 'public, max-age=86400');

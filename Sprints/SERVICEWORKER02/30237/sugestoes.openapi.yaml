@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: API de Sugestões dos Alunos
-  version: 2.1.0
+  version: 2.2.0
   description: API para os alunos submeterem sugestões, os serviços acompanharem o seu tratamento e qualquer pessoa consultar estatísticas de resolução. As operações sobre sugestões exigem autenticação com um token JWT (esquema Bearer), obtido em POST /tokens.
 servers:
   - url: https://api.estgv.exemplo/v2
@@ -21,12 +21,12 @@ paths:
           in: query
           required: false
           schema:
-            $ref: '#/components/schemas/Estado'
+            $ref: "#/components/schemas/Estado"
         - name: categoria
           in: query
           required: false
           schema:
-            $ref: '#/components/schemas/CodigoCategoria'
+            $ref: "#/components/schemas/CodigoCategoria"
         - name: pagina
           in: query
           required: false
@@ -41,59 +41,92 @@ paths:
             minimum: 1
             maximum: 50
       responses:
-        '200':
+        "200":
           description: Página de sugestões que cumprem os filtros
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CachePrivadoNoCache'
+              $ref: "#/components/headers/CachePrivadoNoCache"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListaSugestoes'
-        '400':
-          $ref: '#/components/responses/Erro400'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
+                $ref: "#/components/schemas/ListaSugestoes"
+        "400":
+          $ref: "#/components/responses/Erro400"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
     post:
       operationId: criarSugestao
       summary: Submeter uma sugestão
       description: "Requer token. Papel: aluno. O numeroAluno da sugestão é o do token, não o do corpo do pedido."
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SugestaoNova'
+              $ref: "#/components/schemas/SugestaoNova"
       responses:
-        '201':
+        "201":
           description: Sugestão criada; o cabeçalho Location indica o seu URL
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheNoStore'
+              $ref: "#/components/headers/CacheNoStore"
             Location:
-              $ref: '#/components/headers/Location'
+              $ref: "#/components/headers/Location"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sugestao'
+                $ref: "#/components/schemas/Sugestao"
+        "400":
+          $ref: "#/components/responses/Erro400"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          $ref: "#/components/responses/Proibido"
+        '409':
+          $ref: '#/components/responses/Erro409Idempotencia'
+        default:
+          $ref: "#/components/responses/ErroDefault"
+  /sugestoes/alteracoes:
+    get:
+      operationId: listarAlteracoes
+      summary: Sugestões criadas ou alteradas desde um cursor
+      description: "Requer sessão (cookie). Devolve as sugestões do utilizador com versao superior a desde, por ordem crescente de versao. O cursor devolvido é a maior versao enviada, ou desde se não houver alterações."
+      security:
+        - cookieSessao: []
+      parameters:
+        - name: desde
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Alterações desde o cursor pedido
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CachePrivadoNoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alteracoes'
         '400':
           $ref: '#/components/responses/Erro400'
         '401':
           $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/Proibido'
         default:
           $ref: '#/components/responses/ErroDefault'
-
   /sugestoes/{id}:
     get:
       operationId: obterSugestao
       summary: Obter uma sugestão
       description: "Requer token. Papel: aluno ou servicos. Um aluno só acede às suas sugestões."
       parameters:
-        - $ref: '#/components/parameters/IdSugestao'
+        - $ref: "#/components/parameters/IdSugestao"
         - name: If-None-Match
           in: header
           required: false
@@ -101,46 +134,46 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: A sugestão pedida
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CachePrivadoNoCache'
+              $ref: "#/components/headers/CachePrivadoNoCache"
             ETag:
-              $ref: '#/components/headers/ETag'
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sugestao'
+                $ref: "#/components/schemas/Sugestao"
               example:
                 id: 42
                 titulo: Mais tomadas na biblioteca
                 descricao: Seria útil haver mais tomadas junto às mesas de estudo da biblioteca.
                 categoria: instalacoes
-                numeroAluno: '12345678'
+                numeroAluno: "12345678"
                 estado: aceite
-                dataCriacao: '2026-10-01T09:15:00Z'
-                dataAtualizacao: '2026-10-08T14:30:00Z'
+                dataCriacao: "2026-10-01T09:15:00Z"
+                dataAtualizacao: "2026-10-08T14:30:00Z"
                 dataResolucao: null
-        '304':
+        "304":
           description: A cópia que o cliente tem continua válida
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CachePrivadoNoCache'
+              $ref: "#/components/headers/CachePrivadoNoCache"
             ETag:
-              $ref: '#/components/headers/ETag'
-        '404':
-          $ref: '#/components/responses/Erro404'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
+              $ref: "#/components/headers/ETag"
+        "404":
+          $ref: "#/components/responses/Erro404"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
     put:
       operationId: substituirSugestao
       summary: Editar uma sugestão ainda submetida
       description: "Requer token. Papel: aluno, apenas nas suas sugestões."
       parameters:
-        - $ref: '#/components/parameters/IdSugestao'
+        - $ref: "#/components/parameters/IdSugestao"
         - name: If-Match
           in: header
           required: true
@@ -152,55 +185,55 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SugestaoNova'
+              $ref: "#/components/schemas/SugestaoNova"
       responses:
-        '200':
+        "200":
           description: Sugestão substituída
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheNoStore'
+              $ref: "#/components/headers/CacheNoStore"
             ETag:
-              $ref: '#/components/headers/ETag'
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sugestao'
-        '400':
-          $ref: '#/components/responses/Erro400'
-        '404':
-          $ref: '#/components/responses/Erro404'
-        '409':
-          $ref: '#/components/responses/Erro409Edicao'
-        '412':
-          $ref: '#/components/responses/Erro412'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/Proibido'
+                $ref: "#/components/schemas/Sugestao"
+        "400":
+          $ref: "#/components/responses/Erro400"
+        "404":
+          $ref: "#/components/responses/Erro404"
+        "409":
+          $ref: "#/components/responses/Erro409Edicao"
+        "412":
+          $ref: "#/components/responses/Erro412"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          $ref: "#/components/responses/Proibido"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
     delete:
       operationId: retirarSugestao
       summary: Retirar uma sugestão ainda submetida
       description: "Requer token. Papel: aluno, apenas nas suas sugestões."
       parameters:
-        - $ref: '#/components/parameters/IdSugestao'
+        - $ref: "#/components/parameters/IdSugestao"
       responses:
-        '204':
+        "204":
           description: Sugestão retirada
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheNoStore'
-        '404':
-          $ref: '#/components/responses/Erro404'
-        '409':
-          $ref: '#/components/responses/Erro409Edicao'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/Proibido'
+              $ref: "#/components/headers/CacheNoStore"
+        "404":
+          $ref: "#/components/responses/Erro404"
+        "409":
+          $ref: "#/components/responses/Erro409Edicao"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          $ref: "#/components/responses/Proibido"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
 
   /sugestoes/{id}/acompanhamentos:
     get:
@@ -208,59 +241,59 @@ paths:
       summary: Histórico de acompanhamento, do mais antigo para o mais recente
       description: "Requer token. Papel: aluno ou servicos. Um aluno só acede aos acompanhamentos das suas sugestões."
       parameters:
-        - $ref: '#/components/parameters/IdSugestao'
+        - $ref: "#/components/parameters/IdSugestao"
       responses:
-        '200':
+        "200":
           description: Acompanhamentos da sugestão, do mais antigo para o mais recente
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CachePrivadoNoCache'
+              $ref: "#/components/headers/CachePrivadoNoCache"
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Acompanhamento'
-        '404':
-          $ref: '#/components/responses/Erro404'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
+                  $ref: "#/components/schemas/Acompanhamento"
+        "404":
+          $ref: "#/components/responses/Erro404"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
     post:
       operationId: registarAcompanhamento
       summary: Registar uma mudança de estado
       description: "Requer token. Papel: servicos. O responsavel do acompanhamento é o nome constante do token."
       parameters:
-        - $ref: '#/components/parameters/IdSugestao'
+        - $ref: "#/components/parameters/IdSugestao"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AcompanhamentoNovo'
+              $ref: "#/components/schemas/AcompanhamentoNovo"
       responses:
-        '201':
+        "201":
           description: Acompanhamento registado e estado da sugestão alterado
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheNoStore'
+              $ref: "#/components/headers/CacheNoStore"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Acompanhamento'
-        '400':
-          $ref: '#/components/responses/Erro400'
-        '404':
-          $ref: '#/components/responses/Erro404'
-        '409':
-          $ref: '#/components/responses/Erro409Transicao'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/Proibido'
+                $ref: "#/components/schemas/Acompanhamento"
+        "400":
+          $ref: "#/components/responses/Erro400"
+        "404":
+          $ref: "#/components/responses/Erro404"
+        "409":
+          $ref: "#/components/responses/Erro409Transicao"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "403":
+          $ref: "#/components/responses/Proibido"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
 
   /estatisticas/resolucao:
     get:
@@ -274,19 +307,19 @@ paths:
           required: true
           schema:
             type: string
-            pattern: '^[0-9]{4}-[0-9]{4}$'
+            pattern: "^[0-9]{4}-[0-9]{4}$"
       responses:
-        '200':
+        "200":
           description: Estatísticas de resolução do ano letivo pedido
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CachePublicoHora'
+              $ref: "#/components/headers/CachePublicoHora"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EstatisticasResolucao'
+                $ref: "#/components/schemas/EstatisticasResolucao"
               example:
-                anoLetivo: '2026-2027'
+                anoLetivo: "2026-2027"
                 totalSugestoes: 120
                 porEstado:
                   submetida: 20
@@ -296,10 +329,10 @@ paths:
                   resolvida: 40
                 taxaResolucao: 0.33
                 tempoMedioResolucaoDias: 12.5
-        '400':
-          $ref: '#/components/responses/Erro400'
+        "400":
+          $ref: "#/components/responses/Erro400"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
 
   /estatisticas/categorias:
     get:
@@ -313,21 +346,21 @@ paths:
           required: true
           schema:
             type: string
-            pattern: '^[0-9]{4}-[0-9]{4}$'
+            pattern: "^[0-9]{4}-[0-9]{4}$"
       responses:
-        '200':
+        "200":
           description: Estatísticas por categoria do ano letivo pedido
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CachePublicoHora'
+              $ref: "#/components/headers/CachePublicoHora"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EstatisticasCategorias'
-        '400':
-          $ref: '#/components/responses/Erro400'
+                $ref: "#/components/schemas/EstatisticasCategorias"
+        "400":
+          $ref: "#/components/responses/Erro400"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
 
   /categorias:
     get:
@@ -336,19 +369,19 @@ paths:
       description: "Operação pública, sem autenticação."
       security: []
       responses:
-        '200':
+        "200":
           description: As cinco categorias e a sua descrição
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CachePublicoDia'
+              $ref: "#/components/headers/CachePublicoDia"
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Categoria'
+                  $ref: "#/components/schemas/Categoria"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
 
   /tokens:
     post:
@@ -361,27 +394,27 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Credenciais'
+              $ref: "#/components/schemas/Credenciais"
       responses:
-        '200':
+        "200":
           description: Autenticação bem-sucedida; devolve o token
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheNoStore'
+              $ref: "#/components/headers/CacheNoStore"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Token'
+                $ref: "#/components/schemas/Token"
               example:
                 token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NSIsIm5vbWUiOiJBbmEgU2lsdmEiLCJwYXBlbCI6ImFsdW5vIiwiaWF0IjoxNzkxNTU0NDAwLCJleHAiOjE3OTE1NTUzMDB9.8u1DSuiosgmIn4IsJHIvoumV0L4b2rzuwhww0Vjru1k
                 tipo: Bearer
                 expiraEm: 900
-        '400':
-          $ref: '#/components/responses/Erro400'
-        '401':
-          $ref: '#/components/responses/CredenciaisInvalidas'
+        "400":
+          $ref: "#/components/responses/Erro400"
+        "401":
+          $ref: "#/components/responses/CredenciaisInvalidas"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
 
   /sessao:
     post:
@@ -394,13 +427,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Credenciais'
+              $ref: "#/components/schemas/Credenciais"
       responses:
-        '200':
+        "200":
           description: Sessão criada
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheNoStore'
+              $ref: "#/components/headers/CacheNoStore"
             Set-Cookie:
               description: Cookie de sessão com os atributos HttpOnly, Secure, SameSite=Strict e Path=/.
               schema:
@@ -408,13 +441,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sessao'
-        '400':
-          $ref: '#/components/responses/Erro400'
-        '401':
-          $ref: '#/components/responses/CredenciaisInvalidas'
+                $ref: "#/components/schemas/Sessao"
+        "400":
+          $ref: "#/components/responses/Erro400"
+        "401":
+          $ref: "#/components/responses/CredenciaisInvalidas"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
     get:
       operationId: obterSessao
       summary: Obter a sessão atual
@@ -422,36 +455,36 @@ paths:
       security:
         - tokenJWT: []
       responses:
-        '200':
+        "200":
           description: Sessão atual
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheNoStore'
+              $ref: "#/components/headers/CacheNoStore"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sessao'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
+                $ref: "#/components/schemas/Sessao"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
     delete:
       operationId: terminarSessao
       summary: Terminar a sessão
       description: Operação pública; apaga o cookie de sessão, se existir.
       security: []
       responses:
-        '204':
+        "204":
           description: Sessão terminada
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheNoStore'
+              $ref: "#/components/headers/CacheNoStore"
             Set-Cookie:
               description: Apaga o cookie de sessão usando os atributos HttpOnly, Secure, SameSite=Strict, Path=/ e Max-Age=0.
               schema:
                 type: string
         default:
-          $ref: '#/components/responses/ErroDefault'
+          $ref: "#/components/responses/ErroDefault"
 
 components:
   securitySchemes:
@@ -484,33 +517,40 @@ components:
       schema:
         type: integer
         minimum: 1
-
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: UUID gerado pelo cliente quando cria o pedido; permite repeti-lo sem criar duplicados.
+      schema:
+        type: string
+        format: uuid
   headers:
     CacheNoStore:
       description: Resposta que não deve ser guardada em cache
       schema:
         type: string
-        enum: ['no-store']
+        enum: ["no-store"]
     CachePrivadoNoCache:
       description: Só a cache do utilizador pode guardar, e tem de revalidar antes de cada uso
       schema:
         type: string
-        enum: ['private, no-cache']
+        enum: ["private, no-cache"]
     CachePublicoHora:
       description: Qualquer cache pode guardar durante uma hora
       schema:
         type: string
-        enum: ['public, max-age=3600']
+        enum: ["public, max-age=3600"]
     CachePublicoDia:
       description: Qualquer cache pode guardar durante um dia
       schema:
         type: string
-        enum: ['public, max-age=86400']
+        enum: ["public, max-age=86400"]
     WWWAuthenticate:
       description: Esquema de autenticação exigido pelo servidor
       schema:
         type: string
-        enum: ['Bearer', 'Bearer error="invalid_token"']
+        enum: ["Bearer", 'Bearer error="invalid_token"']
     ETag:
       description: Identificador da versão atual do recurso
       schema:
@@ -519,64 +559,83 @@ components:
       description: URL do recurso criado
       schema:
         type: string
+    CachePrivadoNoStore:
+      description: Resposta pessoal que ninguém deve guardar em cache
+      schema:
+        type: string
+        enum: ["private, no-store"]
+    IdempotentReplayed:
+      description: Presente, com o valor true, quando a resposta repete uma resposta já dada para a mesma Idempotency-Key
+      schema:
+        type: string
+        enum: ["true"]
 
   responses:
     Erro400:
       description: Pedido mal formado ou dados que não cumprem o schema
       headers:
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
     Erro404:
       description: Não existe sugestão com esse id, ou o aluno que a pede não é o seu autor (para ele, a sugestão não existe)
       headers:
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
     Erro409Edicao:
       description: "Regra violada: uma sugestão só pode ser editada ou retirada enquanto o estado for submetida"
       headers:
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
     Erro409Transicao:
       description: "Regra violada: a transição de estado não é permitida (só submetida para em_analise, em_analise para aceite ou rejeitada, aceite para resolvida) ou a sugestão já está fechada (rejeitada ou resolvida)"
       headers:
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
+    Erro409Idempotencia:
+      description: "Regra violada: A Idempotency-Key já foi usada por este utilizador com um corpo diferente"
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/CacheNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Erro"
     Erro412:
       description: A condição If-Match falhou, porque a sugestão foi alterada desde que o cliente a leu
       headers:
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
     NaoAutenticado:
       description: Pedido não autenticado, com token ausente, inválido ou expirado
       headers:
         WWW-Authenticate:
-          $ref: '#/components/headers/WWWAuthenticate'
+          $ref: "#/components/headers/WWWAuthenticate"
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
           example:
             codigo: 401
             mensagem: Token ausente, inválido ou expirado.
@@ -584,29 +643,29 @@ components:
       description: Utilizador ou palavra-passe incorretos
       headers:
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
     Proibido:
       description: Pedido autenticado, mas a identidade não tem permissão para esta operação
       headers:
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
     ErroDefault:
       description: Qualquer outro erro não previsto (por exemplo, 500)
       headers:
         Cache-Control:
-          $ref: '#/components/headers/CacheNoStore'
+          $ref: "#/components/headers/CacheNoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: "#/components/schemas/Erro"
 
   schemas:
     Estado:
@@ -622,7 +681,7 @@ components:
       required: [codigo, descricao]
       properties:
         codigo:
-          $ref: '#/components/schemas/CodigoCategoria'
+          $ref: "#/components/schemas/CodigoCategoria"
         descricao:
           type: string
           minLength: 3
@@ -641,26 +700,39 @@ components:
           minLength: 20
           maxLength: 2000
         categoria:
-          $ref: '#/components/schemas/CodigoCategoria'
+          $ref: "#/components/schemas/CodigoCategoria"
 
     Sugestao:
       allOf:
-        - $ref: '#/components/schemas/SugestaoNova'
+        - $ref: "#/components/schemas/SugestaoNova"
         - type: object
-          required: [id, numeroAluno, estado, dataCriacao, dataAtualizacao, dataResolucao]
+          required:
+            [
+              id,
+              versao,
+              numeroAluno,
+              estado,
+              dataCriacao,
+              dataAtualizacao,
+              dataResolucao,
+            ]
           properties:
             id:
               type: integer
               minimum: 1
               readOnly: true
+            versao:
+              type: integer
+              minimum: 1
+              readOnly: true
             numeroAluno:
               type: string
-              pattern: '^[0-9]{5,8}$'
+              pattern: "^[0-9]{5,8}$"
               readOnly: true
             estado:
               readOnly: true
               allOf:
-                - $ref: '#/components/schemas/Estado'
+                - $ref: "#/components/schemas/Estado"
             dataCriacao:
               type: string
               format: date-time
@@ -680,7 +752,7 @@ components:
       required: [novoEstado, nota]
       properties:
         novoEstado:
-          $ref: '#/components/schemas/Estado'
+          $ref: "#/components/schemas/Estado"
         nota:
           type: string
           minLength: 5
@@ -688,7 +760,7 @@ components:
 
     Acompanhamento:
       allOf:
-        - $ref: '#/components/schemas/AcompanhamentoNovo'
+        - $ref: "#/components/schemas/AcompanhamentoNovo"
         - type: object
           required: [id, responsavel, estadoAnterior, data]
           properties:
@@ -700,12 +772,12 @@ components:
               type: string
               minLength: 5
               maxLength: 60
-              pattern: '^[A-Z][a-z]+ [A-Z][a-z]+$'
+              pattern: "^[A-Z][a-z]+ [A-Z][a-z]+$"
               readOnly: true
             estadoAnterior:
               readOnly: true
               allOf:
-                - $ref: '#/components/schemas/Estado'
+                - $ref: "#/components/schemas/Estado"
             data:
               type: string
               format: date-time
@@ -729,15 +801,32 @@ components:
           type: array
           maxItems: 50
           items:
-            $ref: '#/components/schemas/Sugestao'
-
+            $ref: "#/components/schemas/Sugestao"
+    Alteracoes:
+      type: object
+      required: [alteracoes, cursor]
+      properties:
+        alteracoes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Sugestao"
+        cursor:
+          type: integer
+          minimum: 0
     EstatisticasResolucao:
       type: object
-      required: [anoLetivo, totalSugestoes, porEstado, taxaResolucao, tempoMedioResolucaoDias]
+      required:
+        [
+          anoLetivo,
+          totalSugestoes,
+          porEstado,
+          taxaResolucao,
+          tempoMedioResolucaoDias,
+        ]
       properties:
         anoLetivo:
           type: string
-          pattern: '^[0-9]{4}-[0-9]{4}$'
+          pattern: "^[0-9]{4}-[0-9]{4}$"
         totalSugestoes:
           type: integer
           minimum: 0
@@ -775,7 +864,7 @@ components:
       properties:
         anoLetivo:
           type: string
-          pattern: '^[0-9]{4}-[0-9]{4}$'
+          pattern: "^[0-9]{4}-[0-9]{4}$"
         categorias:
           type: array
           minItems: 1
@@ -785,7 +874,7 @@ components:
             required: [categoria, total, resolvidas, taxaResolucao]
             properties:
               categoria:
-                $ref: '#/components/schemas/CodigoCategoria'
+                $ref: "#/components/schemas/CodigoCategoria"
               total:
                 type: integer
                 minimum: 0

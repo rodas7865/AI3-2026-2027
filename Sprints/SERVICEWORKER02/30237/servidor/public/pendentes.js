@@ -1,4 +1,4 @@
-import { confirmarPendente, lerPendentes, marcarErro } from './bd.js';
+// import { confirmarPendente, lerPendentes, marcarErro } from './bd.js';
 
 let envioEmCurso = false;
 

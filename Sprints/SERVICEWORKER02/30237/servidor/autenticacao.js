@@ -29,6 +29,11 @@ export function enviarErro(res, codigo, mensagem, { detalhes, cabecalhos } = {})
 // --- POST /v2/tokens (passo 16) ---
 const PADRAO_UTILIZADOR = /^([0-9]{5,8}|[a-z]+\.[a-z]+)$/;
 
+// Chaves de Idempotencia
+const PADRAO_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const VALIDADE_CHAVE_MS = 24 * 60 * 60 * 1000; // Horas * Minutos * Segundos * Milisegundos
+const chavesIdempotencia = new Map(); // utilizador -> (chave -> registo)
+
 function validarCredenciais(corpo) {
   if (corpo === null || typeof corpo !== 'object' || Array.isArray(corpo)) {
     return [{ campo: 'corpo', problema: 'O corpo do pedido tem de ser um objeto JSON.' }];
@@ -140,13 +145,22 @@ export function obterSessao(req, res) {
 
 // --- POST /v2/sugestoes (usar após exigirToken e exigirPapel('aluno')) ---
 export function criarSugestao(req, res) {
+  
   if (!req.utilizador) {
     return enviarErro(res, 401, 'Token ausente.', {
       cabecalhos: { 'WWW-Authenticate': 'Bearer' }
     });
   }
+
   if (req.utilizador.papel !== 'aluno') {
     return enviarErro(res, 403, 'Sem permissão para esta operação.');
+  }
+
+  const chave = req.get('Idempotency-Key');
+  if (chave !== undefined && !PADRAO_UUID.test(chave)) {
+    return enviarErro(res, 400, 'Pedido inválido.', {
+      detalhes: [{ campo: 'Idempotency-Key', problema: 'Tem de ser um UUID.' }]
+    });
   }
 
   const corpo = req.body;
@@ -169,11 +183,34 @@ export function criarSugestao(req, res) {
     return enviarErro(res, 400, 'Pedido inválido.', { detalhes });
   }
 
+  const assinatura = JSON.stringify([corpo.titulo, corpo.descricao, corpo.categoria]);
+  const instante = Date.now();
+  let porChave = null;
+
+  if (chave !== undefined) {
+    porChave = chavesIdempotencia.get(req.utilizador.sub);
+    if (!porChave) {
+      porChave = new Map();
+      chavesIdempotencia.set(req.utilizador.sub, porChave);
+    }
+    const guardado = porChave.get(chave);
+    if (guardado && guardado.expira > instante) {
+      if (guardado.assinatura !== assinatura) {
+        return enviarErro(res, 409, 'Esta Idempotency-Key já foi usada com um pedido diferente.');
+      }
+      res.set('Cache-Control', 'no-store');
+      res.set('Idempotent-Replayed', 'true');
+      res.location(guardado.location);
+      return res.status(guardado.codigo).json(guardado.corpo);
+    }
+  }
+
   const sugestoes = req.app.locals.sugestoes;
   const id = sugestoes.reduce((maior, item) => Math.max(maior, item.id), 0) + 1;
   const agora = new Date().toISOString();
   const sugestao = {
     id,
+    versao: ++req.app.locals.ultimaVersao,
     titulo: corpo.titulo,
     descricao: corpo.descricao,
     categoria: corpo.categoria,
@@ -185,6 +222,22 @@ export function criarSugestao(req, res) {
   };
 
   sugestoes.push(sugestao);
+
+  if (porChave) {
+    porChave.set(chave, {
+      assinatura,
+      codigo: 201,
+      location: `/v2/sugestoes/${id}`,
+      corpo: structuredClone(sugestao),
+      expira: instante + VALIDADE_CHAVE_MS
+    });
+  }
+
+  if (porChave && process.env.SIMULAR_PERDA_RESPOSTA === '1') {
+    req.socket.destroy();
+    return;
+  }
+  
   res.set('Cache-Control', 'no-store');
   res.location(`/v2/sugestoes/${id}`);
   res.status(201).json(sugestao);
