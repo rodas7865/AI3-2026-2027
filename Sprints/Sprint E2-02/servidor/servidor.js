@@ -13,9 +13,10 @@ estado.carregarDados();
 
 app.use(express.json({ limit: '1mb' }));
 
-let falhas503Restantes = Number.parseInt(process.env.SIMULAR_503 || '0', 10);
+let falhas503Restantes = Number(process.env.SIMULAR_503 || 0);
 if (!Number.isInteger(falhas503Restantes) || falhas503Restantes < 0) falhas503Restantes = 0;
 app.use('/v1', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
   if (falhas503Restantes > 0) {
     falhas503Restantes -= 1;
     res.set('Retry-After', '2');

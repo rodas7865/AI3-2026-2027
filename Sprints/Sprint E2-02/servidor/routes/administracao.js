@@ -9,8 +9,8 @@ router.patch('/:id', (req, res) => {
   if (req.get('X-Admin-Token') !== ADMIN_TOKEN) {
     return utilitarios.erro(res, 403, 'token-invalido', 'X-Admin-Token em falta ou inválido');
   }
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id < 1) {
+  const id = req.params.id;
+  if (!utilitarios.uuidValido(id)) {
     return utilitarios.erro(res, 400, 'pedido-invalido', 'Id da ocorrência inválido');
   }
   if (!req.body || !estado.estados.has(req.body.estado)) {

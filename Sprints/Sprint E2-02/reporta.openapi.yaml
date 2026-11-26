@@ -333,15 +333,15 @@ components:
       in: path
       required: true
       schema:
-        type: integer
-        minimum: 1
+        type: string
+        format: uuid
 
   headers:
     Location:
       description: URL da ocorrência criada ou reforçada
       schema:
         type: string
-        example: /v1/ocorrencias/87
+        example: /v1/ocorrencias/550e8400-e29b-41d4-a716-446655440000
     IdempotentReplayed:
       description: Presente com o valor "true" quando a resposta é a guardada de uma chave repetida
       schema:
@@ -416,7 +416,8 @@ components:
       required: [id, categoria, descricao, localizacao, temFotografia, estado, comunicacoes, criadaEm, atualizadaEm, versao]
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         categoria:
           $ref: '#/components/schemas/CategoriaId'
         descricao:
@@ -458,7 +459,8 @@ components:
           type: array
           description: Ids das candidatas que o cidadão recusou («É outra»)
           items:
-            type: integer
+            type: string
+            format: uuid
     ResultadoComunicacao:
       type: object
       required: [resultado, ocorrencia]
@@ -474,7 +476,7 @@ components:
       properties:
         codigo:
           type: string
-          example: nao-implementado
+          example: pedido-invalido
         mensagem:
           type: string
-          example: Rota ainda não implementada
+          example: Pedido inválido

@@ -13,7 +13,7 @@ function validarNovaOcorrencia(corpo) {
   if (!utilitarios.validarFotografia(corpo.fotografia)) return false;
   if (corpo.recusadas !== undefined &&
       (!Array.isArray(corpo.recusadas) ||
-       corpo.recusadas.some((id) => !Number.isInteger(id) || id < 1))) return false;
+       corpo.recusadas.some((id) => !utilitarios.uuidValido(id)))) return false;
   return true;
 }
 
@@ -112,7 +112,7 @@ router.post('/', (req, res) => {
   const cabecalhos = { 'Cache-Control': 'no-store' };
 
   if (semelhantes.length === 0) {
-    const id = estado.obterProximoId();
+    const id = estado.gerarId();
     ocorrencia = {
       id,
       categoria: req.body.categoria,
@@ -170,12 +170,15 @@ router.post('/:id/reforcos', (req, res) => {
   if (!cidadao) return;
   const chave = utilitarios.chaveValida(req, res);
   if (chave === false) return;
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id < 1) {
+  const id = req.params.id;
+  if (!utilitarios.uuidValido(id)) {
     return utilitarios.erro(res, 400, 'pedido-invalido', 'Id da ocorrência inválido');
   }
-  if (req.body && typeof req.body === 'object' &&
-      req.body.comentario !== undefined &&
+  if (req.body !== undefined &&
+      (!req.body || typeof req.body !== 'object' || Array.isArray(req.body))) {
+    return utilitarios.erro(res, 400, 'pedido-invalido', 'Corpo do reforço inválido');
+  }
+  if (req.body && req.body.comentario !== undefined &&
       (typeof req.body.comentario !== 'string' || req.body.comentario.length > 500)) {
     return utilitarios.erro(res, 400, 'pedido-invalido', 'Comentário inválido');
   }
@@ -232,8 +235,8 @@ router.post('/:id/reforcos', (req, res) => {
 });
 
 router.get('/:id/fotografia', (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id < 1) {
+  const id = req.params.id;
+  if (!utilitarios.uuidValido(id)) {
     return utilitarios.erro(res, 400, 'pedido-invalido', 'Id da ocorrência inválido');
   }
   const fotografia = estado.fotografias.get(id);

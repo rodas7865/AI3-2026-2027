@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { distanciaEmMetros } = require('./geo');
 
 const dadosDir = path.join(__dirname, 'dados');
@@ -19,7 +20,6 @@ const fotografias = new Map();
 const idempotencias = new Map();
 
 let versao = 0;
-let proximoId = 1;
 let perdaJaSimulada = false;
 
 function carregarDados() {
@@ -27,10 +27,17 @@ function carregarDados() {
   try {
     const dados = JSON.parse(fs.readFileSync(dadosFicheiro, 'utf8'));
     versao = Number.isInteger(dados.versao) ? dados.versao : 0;
-    proximoId = Number.isInteger(dados.proximoId) ? dados.proximoId : 1;
     for (const ocorrencia of dados.ocorrencias || []) {
       ocorrencias.set(ocorrencia.id, ocorrencia);
-      if (ocorrencia.fotografia) fotografias.set(ocorrencia.id, ocorrencia.fotografia);
+    }
+    if (dados.fotografias && typeof dados.fotografias === 'object') {
+      for (const [id, fotografia] of Object.entries(dados.fotografias)) {
+        fotografias.set(id, fotografia);
+      }
+    } else {
+      for (const ocorrencia of dados.ocorrencias || []) {
+        if (ocorrencia.fotografia) fotografias.set(ocorrencia.id, ocorrencia.fotografia);
+      }
     }
     for (const item of dados.idempotencias || []) {
       if (item.expiraEm > Date.now()) {
@@ -38,7 +45,7 @@ function carregarDados() {
       }
     }
   } catch (err) {
-    console.error('Não foi possível carregar dados:', err.message);
+    throw new Error(`Não foi possível carregar os dados persistidos: ${err.message}`, { cause: err });
   }
 }
 
@@ -46,11 +53,8 @@ function guardarDados() {
   fs.mkdirSync(dadosDir, { recursive: true });
   fs.writeFileSync(dadosFicheiro, JSON.stringify({
     versao,
-    proximoId,
-    ocorrencias: [...ocorrencias.values()].map((ocorrencia) => ({
-      ...ocorrencia,
-      fotografia: fotografias.get(ocorrencia.id)
-    })),
+    ocorrencias: [...ocorrencias.values()],
+    fotografias: Object.fromEntries(fotografias),
     idempotencias: [...idempotencias.values()]
   }, null, 2));
 }
@@ -121,8 +125,8 @@ function obterVersao() {
   return versao;
 }
 
-function obterProximoId() {
-  return proximoId++;
+function gerarId() {
+  return randomUUID();
 }
 
 module.exports = {
@@ -140,5 +144,5 @@ module.exports = {
   guardarIdempotencia,
   respostaPost,
   obterVersao,
-  obterProximoId
+  gerarId
 };
